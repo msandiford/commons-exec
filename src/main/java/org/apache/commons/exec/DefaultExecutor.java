@@ -161,7 +161,7 @@ public class DefaultExecutor implements Executor {
             throw new IOException(workingDirectory + " doesn't exist.");
         }
         
-        return executeInternal(command, environment, workingDirectory, streamHandler);
+        return executeInternal(command, null, environment, workingDirectory, streamHandler);
 
     }
 
@@ -189,13 +189,14 @@ public class DefaultExecutor implements Executor {
             watchdog.setProcessNotStarted();
         }
 
+        final SimpleCondition condition = new SimpleCondition();
         Runnable runnable = new Runnable()
         {
             public void run()
             {
                 int exitValue = Executor.INVALID_EXITVALUE;
                 try {
-                    exitValue = executeInternal(command, environment, workingDirectory, streamHandler);
+                    exitValue = executeInternal(command, condition, environment, workingDirectory, streamHandler);
                     handler.onProcessComplete(exitValue);
                 } catch (ExecuteException e) {
                     handler.onProcessFailed(e);
@@ -207,6 +208,9 @@ public class DefaultExecutor implements Executor {
 
         this.executorThread = createThread(runnable, "Exec Default Executor");
         getExecutorThread().start();
+
+        // Wait until the thread tells us we have actually started
+        condition.sleep();
     }
 
     /** @see org.apache.commons.exec.Executor#setExitValue(int) */
@@ -316,6 +320,33 @@ public class DefaultExecutor implements Executor {
     }
 
     /**
+     * Simple thread notify mechanism.
+     */
+    private static final class SimpleCondition {
+        private final Object lock = new Object();
+        private volatile boolean notified = false;
+
+        public void sleep() {
+            try {
+                synchronized (lock) {
+                    while (!notified) {
+                        lock.wait();
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        public void wakeup() {
+            synchronized (lock) {
+                notified = true;
+                lock.notifyAll();
+            }
+        }
+    }
+
+    /**
      * Execute an internal process. If the executing thread is interrupted while waiting for the
      * child process to return the child process will be killed.
      *
@@ -326,12 +357,20 @@ public class DefaultExecutor implements Executor {
      * @return the exit code of the process
      * @throws IOException executing the process failed
      */
-    private int executeInternal(final CommandLine command, final Map environment,
-            final File dir, final ExecuteStreamHandler streams) throws IOException {
+    private int executeInternal(final CommandLine command, final SimpleCondition cond,
+            final Map environment, final File dir, final ExecuteStreamHandler streams)
+                    throws IOException {
 
         setExceptionCaught(null);
 
-        final Process process = this.launch(command, environment, dir);
+        final Process process;
+        try {
+            process = this.launch(command, environment, dir);
+        } finally {
+            // If necessary, let our parent know that the process has launched
+            if (cond != null)
+                cond.wakeup();
+        }
 
         try {
             streams.setProcessInputStream(process.getOutputStream());
