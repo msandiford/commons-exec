@@ -1073,7 +1073,7 @@ public class DefaultExecutorTest extends TestCase {
         CommandLine cmdLine = new CommandLine(pingScript);
         cmdLine.addArgument(Integer.toString(seconds + 1)); // need to add "1" to wait the requested number of seconds
 
-        for (int offset = start; offset <= 20; offset += 1) {
+        for (int offset = start; offset <= 100; offset += 1) {
             ExecuteWatchdog watchdog = new ExecuteWatchdog(seconds * 1000 + offset);
             exec.setWatchdog(watchdog);
             try {
