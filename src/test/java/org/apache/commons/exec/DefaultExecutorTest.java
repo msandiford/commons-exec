@@ -1074,12 +1074,14 @@ public class DefaultExecutorTest extends TestCase {
         cmdLine.addArgument(Integer.toString(seconds + 1)); // need to add "1" to wait the requested number of seconds
 
         for (int offset = start; offset <= 100; offset += 1) {
-            ExecuteWatchdog watchdog = new ExecuteWatchdog(seconds * 1000 + offset);
+            ExecuteWatchdog watchdog = new ExecuteWatchdog(seconds * 980 + offset);
             exec.setWatchdog(watchdog);
             try {
+                long startMillis = System.currentTimeMillis();
                 exec.execute(cmdLine);
+                long timeMillis = System.currentTimeMillis() - startMillis;
                 processTerminatedCounter++;
-                System.out.println(offset + ": process has terminated: " + watchdog.killedProcess());
+                System.out.println(offset + ": process has terminated: " + watchdog.killedProcess() + " in " + timeMillis + " milliseconds");
                 if(processTerminatedCounter > 5) {
                     break;
                 }
