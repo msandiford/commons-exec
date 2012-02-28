@@ -1094,6 +1094,49 @@ public class DefaultExecutorTest extends TestCase {
         assertTrue("Not a single process was killed by the watch dog", watchdogKilledProcessCounter > 0);
     }
 
+
+    /**
+     * Test EXEC-63 (https://issues.apache.org/jira/browse/EXEC-63).
+     *
+     * Frequent deadlock when constructing a command pipe chain.
+     * Please note that a successful test is no proof that the issues was fixed.
+     *
+     * @throws IOException the test failed
+     */
+    public void testExec_63() throws IOException {
+        CommandLine cmd0;
+        CommandLine cmd1;
+        if (OS.isFamilyUnix()) {
+            cmd0 = new CommandLine("ls").addArgument("-l");
+            cmd1 = new CommandLine("sort");
+        } else if (OS.isFamilyWindows()) {
+            cmd0 = new CommandLine("cmd").addArgument("/c").addArgument("dir");
+            cmd1 = new CommandLine("sort");
+        } else {
+            System.err.println("The test 'testExec_63' does not support the following OS : " + System.getProperty("os.name"));
+            return;
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        ByteArrayInputStream in = new ByteArrayInputStream(new byte[0]);
+        PipedInputStream pipeIn = new PipedInputStream();
+        PipedOutputStream pipeOut = new PipedOutputStream(pipeIn);
+        DefaultExecutor exec0 = new DefaultExecutor();
+        ExecuteWatchdog watchdog0 = new ExecuteWatchdog(5000);
+        exec0.setWatchdog(watchdog0);
+        exec0.setStreamHandler(new PumpStreamHandler(pipeOut, null, in));
+        exec0.execute(cmd0, new DefaultExecuteResultHandler());
+
+        DefaultExecutor exec1 = new DefaultExecutor();
+        ExecuteWatchdog watchdog1 = new ExecuteWatchdog(5000);
+        exec1.setWatchdog(watchdog1);
+        exec1.setStreamHandler(new PumpStreamHandler(out, err, pipeIn));
+        int result = exec1.execute(cmd1);
+        assertTrue("Command exited with status 0", result == 0);
+        assertTrue("Output was as expected", out.toString().length() > 500);
+        assertEquals("No errors were output", err.toString().trim(), "");
+    }
+
     // ======================================================================
     // === Long running tests
     // ======================================================================
